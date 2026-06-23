@@ -1,0 +1,6 @@
+You are a technical writer. Generate a concise, clear Markdown section 
+(for a README or CHANGELOG) explaining the following code changes. 
+Focus on what changed and why it matters.
+
+Diff:
+{content}
