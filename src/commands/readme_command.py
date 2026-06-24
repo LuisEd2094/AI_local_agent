@@ -6,26 +6,83 @@ from src.prompts import build_document_prompt
 from pathlib import Path
 from typing import Any, Mapping
 
+SKIP_DIRS = {'__pycache__', '.git', '.venv', '.env', 'node_modules', 'dist', 'build', '__MACOSX'}
+
+
 
 def generate_docs_from_content(
         content: str,
         content_type: str = "diff", 
-        max_chars: int = 4000,
         filename: str | None = None,
+        folderpath: str | None = None,
+
     ) -> str:
-    prompt = build_document_prompt(content, content_type=content_type, max_chars=max_chars, filename=filename)
+    prompt = build_document_prompt(
+        content,
+        content_type=content_type,
+        filename=filename,
+        folderpath=folderpath,
+    )
+    print(f"\n🔍 Generating documentation with prompt: {prompt}")
     return call_llm(
         messages=[
             {"role": "system", "content": "You produce high-quality Markdown documentation."},
             {"role": "user", "content": prompt},
         ],
         expect_json=False,
-        options={"temperature": 0.4},
+        options={"temperature": 0.1},
     )
 
+def read_file_content(filepath: str) -> str:
+    if not filepath or not os.path.isfile(filepath):
+        raise ValueError(f"File not found: {filepath}")
+    try:
+        content = Path(filepath).read_text(encoding='utf-8')
+        return content
+    except Exception as e:
+        raise ValueError(f"Could not read file {filepath}: {e}")
+
+def read_folder_files(
+    folderpath: str,
+    extensions: tuple = ('.py', '.md', '.txt', '.json', '.yaml', '.js', '.html', '.css'),
+    include_hidden: bool = False
+) -> dict[str, str]:
+    """
+    Read all files in a folder (recursively) and return a dict {filename: content}.
+    
+    Raises:
+        ValueError: if folderpath is empty, does not exist, or is not a directory.
+    """
+    if not folderpath:
+        raise ValueError("Folder path is empty.")
+    if not os.path.exists(folderpath):
+        raise ValueError(f"Folder does not exist: {folderpath}")
+    if not os.path.isdir(folderpath):
+        raise ValueError(f"Path is not a directory: {folderpath}")
+
+    contents = {}
+    root = Path(folderpath)
+    for filepath in root.rglob('*'):
+        if not include_hidden:
+            if any(part.startswith('.') for part in filepath.parts):
+                continue
+        if any(part in SKIP_DIRS for part in filepath.parts):
+            continue
+        print(f"🔍 Checking file: {filepath}")
+        if filepath.is_file() and filepath.suffix in extensions:
+            try:
+                content = read_file_content(filepath)
+                contents[str(filepath.relative_to(root))] = content
+            except ValueError as e:
+                contents[str(filepath.relative_to(root))] = f"(Error reading file: {e})"
+    return contents
 
 def handle_generate_readme(params: Mapping[str, Any]) -> None:
     source = params.get("source")
+    if source is None:
+        print("❌ Missing 'source' parameter.")
+        return
+    doc = None
 
     if source == "git_diff":
         print("🔍 Running git diff to fetch changes...")
@@ -33,28 +90,36 @@ def handle_generate_readme(params: Mapping[str, Any]) -> None:
         if not diff_output.strip():
             print("No diff found.")
             return
-        save_docs(generate_docs_from_content(diff_output, "diff"))
-        return
+        doc = generate_docs_from_content(diff_output, "diff")
 
-    if source == "file":
+    elif source == "file":
         filepath = params.get("filepath")
-        if not filepath:
-            print("❌ Missing 'filepath' parameter.")
-            return
-
-        if not os.path.isfile(filepath):
-            print(f"❌ File not found: {filepath}")
-            return
-
         print(f"🔍 Reading file: {filepath}")
-        content = Path(filepath).read_text(encoding="utf-8")
-        save_docs(generate_docs_from_content(content, "file", filename=filepath))
+        content = read_file_content(filepath)
+        doc = generate_docs_from_content(content, "file", filename=filepath)
+
+    elif source == "folder":
+        folderpath = params.get("folderpath")
+        try:
+            print(f"🔍 Reading folder: {folderpath}")
+            contents = read_folder_files(folderpath)
+        except ValueError as e:
+            print(f"❌ {e}")
+            return
+        if not contents:
+            print("❌ No readable files found in folder.")
+            return
+        doc = generate_docs_from_content(contents, "folder", folderpath=folderpath)
+    else:
+        print(f"❌ Unknown source: {source}")
+        return
+    if not doc:
+        print("❌ No documentation generated.")
         return
 
-    print(f"❌ Unknown source: {source}")
+    save_docs(doc)
 
-
-def save_docs(content: str, default_filename: str = "README.md") -> None:
+def save_docs(content: str, default_filename: str = "AGENT_RESULT.md") -> None:
     print("\n--- Generated Documentation ---")
     print(content)
     print("-------------------------------")
