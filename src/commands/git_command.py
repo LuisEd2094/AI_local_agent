@@ -19,7 +19,7 @@ def build_git_diff_command(params: Mapping[str, Any]) -> list[str]:
     return command
 
 
-def handle_git_diff(params: Mapping[str, Any]) -> None:
+def handle_git_diff(params: Mapping[str, Any], user_prompt: str | None = None) -> None:
     command = build_git_diff_command(params)
 
     output = run_command(command)
@@ -29,6 +29,6 @@ def handle_git_diff(params: Mapping[str, Any]) -> None:
     if output.strip():
         generate_docs = input("\n📝 Generate documentation from this diff? (y/n): ").strip().lower()
         if generate_docs == "y":
-            save_docs(generate_docs_from_content(output, "diff"))
+            save_docs(generate_docs_from_content(output, "diff", user_prompt=user_prompt))
     else:
         print("No changes to document.")

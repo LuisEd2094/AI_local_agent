@@ -2,11 +2,11 @@ import os
 
 from src.run_command import run_command
 from src.run_llm import call_llm
-from src.prompts import build_document_prompt
+from src.prompts import build_doc_messages
 from pathlib import Path
 from typing import Any, Mapping
 
-SKIP_DIRS = {'__pycache__', '.git', '.venv', '.env', 'node_modules', 'dist', 'build', '__MACOSX'}
+SKIP_DIRS = {'__pycache__', '.git', '.venv', '.env', 'node_modules', 'dist', 'build', '__MACOSX', 'promts'}
 
 
 
@@ -15,19 +15,21 @@ def generate_docs_from_content(
         content_type: str = "diff", 
         filename: str | None = None,
         folderpath: str | None = None,
+        user_prompt: str | None = None
 
     ) -> str:
-    prompt = build_document_prompt(
-        content,
+    system_prompt, user_message = build_doc_messages(
+        content=content,
         content_type=content_type,
         filename=filename,
         folderpath=folderpath,
+        user_prompt=user_prompt,
     )
-    print(f"\n🔍 Generating documentation with prompt: {prompt}")
+    print(f"\n🔍 Generating documentation with prompt:{user_message}")
     return call_llm(
         messages=[
-            {"role": "system", "content": "You produce high-quality Markdown documentation."},
-            {"role": "user", "content": prompt},
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
         ],
         expect_json=False,
         options={"temperature": 0.1},
@@ -77,12 +79,14 @@ def read_folder_files(
                 contents[str(filepath.relative_to(root))] = f"(Error reading file: {e})"
     return contents
 
-def handle_generate_readme(params: Mapping[str, Any]) -> None:
+def handle_generate_readme(params: Mapping[str, Any],
+                           user_prompt: str | None = None) -> None:
     source = params.get("source")
     if source is None:
         print("❌ Missing 'source' parameter.")
         return
     doc = None
+    additional_context = params.get("additional_context", False)
 
     if source == "git_diff":
         print("🔍 Running git diff to fetch changes...")
@@ -90,26 +94,41 @@ def handle_generate_readme(params: Mapping[str, Any]) -> None:
         if not diff_output.strip():
             print("No diff found.")
             return
-        doc = generate_docs_from_content(diff_output, "diff")
+        doc = generate_docs_from_content(diff_output, "diff", user_prompt=user_prompt)
 
     elif source == "file":
         filepath = params.get("filepath")
         print(f"🔍 Reading file: {filepath}")
         content = read_file_content(filepath)
-        doc = generate_docs_from_content(content, "file", filename=filepath)
+        doc = generate_docs_from_content(content, "file", filename=filepath, user_prompt=user_prompt)
 
     elif source == "folder":
         folderpath = params.get("folderpath")
+        if not folderpath:
+            print("❌ Missing 'folderpath' parameter.")
+            return
+
         try:
-            print(f"🔍 Reading folder: {folderpath}")
-            contents = read_folder_files(folderpath)
+            if additional_context:
+                print("🔍 Reading whole repository for context...")
+                contents = read_folder_files(".")
+            else:
+                print(f"🔍 Reading folder: {folderpath}")
+                contents = read_folder_files(folderpath)
         except ValueError as e:
             print(f"❌ {e}")
             return
+
         if not contents:
-            print("❌ No readable files found in folder.")
+            print("❌ No readable files found.")
             return
-        doc = generate_docs_from_content(contents, "folder", folderpath=folderpath)
+
+        doc = generate_docs_from_content(
+            contents,
+            content_type="folder",
+            folderpath=folderpath,
+            user_prompt=user_prompt,
+        )
     else:
         print(f"❌ Unknown source: {source}")
         return

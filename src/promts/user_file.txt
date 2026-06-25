@@ -1,0 +1,9 @@
+User request: {user_prompt}
+
+Document the file: **{filename}**.
+
+--- START OF FILE ---
+{content}
+--- END OF FILE ---
+
+Generate a README section for this file.

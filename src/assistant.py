@@ -5,7 +5,7 @@ from src.commands.git_command import handle_git_diff
 from src.commands.readme_command import handle_generate_readme
 from src.run_llm import call_llm
 
-from .prompts import SYSTEM_PROMPT
+from .prompts import MAIN_SYS
 
 
 COMMANDS = {
@@ -19,7 +19,7 @@ def handle_assistant_request(query: str) -> None:
     try:
         result = call_llm(
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": MAIN_SYS},
                 {"role": "user", "content": query},
             ],
             expect_json=True,
@@ -29,7 +29,7 @@ def handle_assistant_request(query: str) -> None:
         print(f"\n🤖 Assistant suggested action: {action} with parameters: {params}")
 
         if action in COMMANDS:
-            COMMANDS[action](params)
+            COMMANDS[action](params, user_prompt=query)
         else:
             print(f"⚠️  Unknown action: {action}")
             

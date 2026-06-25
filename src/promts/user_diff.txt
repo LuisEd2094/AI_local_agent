@@ -1,0 +1,9 @@
+User request: {user_prompt}
+
+The following is a git diff:
+
+--- START OF DIFF ---
+{content}
+--- END OF DIFF ---
+
+Please generate documentation based on these changes.

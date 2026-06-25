@@ -1,0 +1,9 @@
+User request: {user_prompt}
+
+The following are the contents of files from the project. Focus your documentation on the folder: **{folderpath}**.
+
+--- START OF FILES ---
+{content}
+--- END OF FILES ---
+
+Generate a comprehensive README for this folder, using the context of the whole project where relevant.
